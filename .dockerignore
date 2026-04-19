@@ -1,0 +1,10 @@
+.git
+.github
+.localdata
+.pytest_cache
+.venv
+__pycache__
+build
+dist
+office_docs_to_md_sync.egg-info
+*.pyc

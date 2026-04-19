@@ -48,3 +48,35 @@ Windows PowerShell:
 ```bash
 pytest
 ```
+
+## Build package
+
+```bash
+python -m pip install build
+python -m build
+```
+
+The generated wheel includes the web UI static assets and exposes the `office-docs-to-md-sync` command.
+
+## Docker
+
+```bash
+docker build -t office-docs-to-md-sync .
+docker run --rm -p 8080:8080 -v "$(pwd)/.localdata:/data" office-docs-to-md-sync
+```
+
+### Docker Compose
+
+```bash
+cp docker-compose.example.yml docker-compose.yml
+docker compose up -d
+```
+
+The included example mounts `./data` to `/data` for the app database and runtime state.
+
+## GitHub release
+
+- Pushing a tag like `v0.1.0` runs `.github/workflows/release.yml` and publishes the wheel and sdist to GitHub Releases.
+- You can also run the same workflow manually with an existing `v*` tag from the GitHub Actions UI.
+- The same workflow also publishes Docker images to `ghcr.io/<owner>/<repo>` with tags `vX.Y.Z`, `X.Y.Z`, and `latest`.
+- If the release for that tag already exists, the workflow updates the release and replaces old assets. Re-pushing the same image tag to GHCR also replaces the previous image manifest for that tag.

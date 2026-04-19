@@ -57,6 +57,7 @@ python -m build
 ```
 
 The generated wheel includes the web UI static assets and exposes the `office-docs-to-md-sync` command.
+The packaged dependency set is intentionally limited to the `markitdown` extras this app targets: `docx`, `pptx`, `xlsx`, and `pdf`.
 
 ## Docker
 

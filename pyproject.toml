@@ -1,0 +1,30 @@
+[project]
+name = "office-docs-to-md-sync"
+version = "0.1.0"
+description = "Local web app for watching Office documents and syncing them as Markdown."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0,<1.0.0",
+  "gitpython>=3.1.43,<4.0.0",
+  "markitdown[all]>=0.1.1",
+  "pydantic>=2.9.0,<3.0.0",
+  "uvicorn>=0.30.0,<1.0.0",
+  "watchdog>=4.0.0,<5.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.27.0,<1.0.0",
+  "pytest>=8.3.0,<9.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

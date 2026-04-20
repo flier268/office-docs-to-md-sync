@@ -84,10 +84,13 @@ The included example mounts `./data` to `/data` for the app database and runtime
 ## GitHub release
 
 - Pushing a tag like `v0.1.0` runs `.github/workflows/release.yml` and publishes both the PyInstaller Linux bundle and Windows bundle to GitHub Releases.
-- You can also run the same workflow manually from the GitHub Actions UI by selecting a branch, then providing a full `v*` tag such as `v0.1.0`. If the tag does not exist yet, the workflow creates and pushes it from the selected branch before publishing the release.
-- The same workflow also publishes multi-arch Docker images to `ghcr.io/<owner>/<repo>` with tags `vX.Y.Z`, `X.Y.Z`, and `latest` for both `linux/amd64` and `linux/arm64`.
+- You can also run the same workflow manually from the GitHub Actions UI by selecting a branch, then providing a full `v*` tag such as `v0.1.0`. The workflow creates and pushes that tag from the selected branch before publishing the release, and it fails if that release tag already exists unless you explicitly enable `allow_move_release_tag`.
+- Manual runs now treat the release tag and `latest` separately. Set `mark_as_latest` only when that release should become the current latest release.
+- Set `allow_move_release_tag` only when you intentionally want to force-move an existing `v*` release tag to the selected commit.
+- When a release is marked as latest, the workflow force-moves the Git tag `latest` to that release commit and also publishes the container `latest` tag.
+- The same workflow always publishes multi-arch Docker images to `ghcr.io/<owner>/<repo>` with tags `vX.Y.Z` and `X.Y.Z`, and only publishes `latest` when that release is marked as latest.
 - If the release for that tag already exists, the workflow updates the release and replaces old assets. Re-pushing the same image tag to GHCR also replaces the previous image manifest for that tag.
-- `.github/workflows/monthly-image.yml` also publishes the container image automatically at `00:00 UTC` on the first day of every month, tagging it as `latest` and `monthly-YYYY-MM`.
+- `.github/workflows/monthly-image.yml` also publishes the container image automatically at `00:00 UTC` on the first day of every month from the Git tag `latest`, tagging it as `edge` and `monthly-YYYY-MM`.
 - You can run the monthly image workflow manually from the GitHub Actions UI if you want to refresh the container image outside the normal schedule.
 
 ## Continuous integration

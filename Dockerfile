@@ -16,6 +16,7 @@ COPY office-docs-to-md-sync.spec ./
 
 RUN python -m pip install --upgrade pip \
     && python -m pip install --no-cache-dir . pyinstaller \
+    && python -c "import app.converter, markitdown, markitdown_no_magika" \
     && pyinstaller --noconfirm office-docs-to-md-sync.spec
 
 

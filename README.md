@@ -87,6 +87,8 @@ The included example mounts `./data` to `/data` for the app database and runtime
 - You can also run the same workflow manually from the GitHub Actions UI by selecting a branch, then providing a full `v*` tag such as `v0.1.0`. If the tag does not exist yet, the workflow creates and pushes it from the selected branch before publishing the release.
 - The same workflow also publishes multi-arch Docker images to `ghcr.io/<owner>/<repo>` with tags `vX.Y.Z`, `X.Y.Z`, and `latest` for both `linux/amd64` and `linux/arm64`.
 - If the release for that tag already exists, the workflow updates the release and replaces old assets. Re-pushing the same image tag to GHCR also replaces the previous image manifest for that tag.
+- `.github/workflows/monthly-image.yml` also publishes the container image automatically at `00:00 UTC` on the first day of every month, tagging it as `latest` and `monthly-YYYY-MM`.
+- You can run the monthly image workflow manually from the GitHub Actions UI if you want to refresh the container image outside the normal schedule.
 
 ## Continuous integration
 

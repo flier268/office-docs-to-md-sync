@@ -21,7 +21,7 @@ class Converter:
 
     def target_path_for(self, task: SyncTask, source_path: Path) -> Path:
         relative = source_path.relative_to(task.paths.source_path())
-        return task.paths.output_dir_path() / relative.with_suffix(".md")
+        return task.paths.output_dir_path() / relative.parent / f"{relative.name}.md"
 
     def convert_path(self, task: SyncTask, source_path: Path) -> str:
         ext = source_path.suffix.lower()

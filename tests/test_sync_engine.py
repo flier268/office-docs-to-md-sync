@@ -33,7 +33,7 @@ def test_sync_engine_copies_markdown_file(tmp_path: Path) -> None:
     engine.queued_paths[task.id or 0][source_file] = 0
     engine._process_task_queue(task)
 
-    target_file = Path(task.paths.target_root) / task.paths.output_subdir / "123.md"
+    target_file = Path(task.paths.target_root) / task.paths.output_subdir / "123.md.md"
     assert target_file.read_text(encoding="utf-8") == "hello\n"
 
 
@@ -50,7 +50,7 @@ def test_sync_engine_commits_inside_target_root(tmp_path: Path) -> None:
 
     assert engine.statuses[task.id or 0].last_error is None
     assert (Path(task.paths.target_root) / ".git").exists()
-    assert (Path(task.paths.target_root) / task.paths.output_subdir / "123.md").exists()
+    assert (Path(task.paths.target_root) / task.paths.output_subdir / "123.md.md").exists()
 
 
 def test_reload_tasks_clears_queue_on_disable_and_removes_deleted_task(tmp_path: Path) -> None:

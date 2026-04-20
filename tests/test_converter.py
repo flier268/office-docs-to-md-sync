@@ -33,7 +33,24 @@ def test_target_path_for(tmp_path: Path) -> None:
 
     target = converter.target_path_for(task, source_path)
 
-    assert target == Path(task.paths.target_root) / "md" / "nested" / "report.md"
+    assert target == Path(task.paths.target_root) / "md" / "nested" / "report.docx.md"
+
+
+def test_target_path_for_keeps_source_extension_to_avoid_collisions(tmp_path: Path) -> None:
+    task = sample_task(tmp_path)
+    converter = Converter()
+    docx_path = Path(task.paths.source_dir) / "nested" / "A.docx"
+    xlsx_path = Path(task.paths.source_dir) / "nested" / "A.xlsx"
+    docx_path.parent.mkdir()
+    docx_path.write_text("placeholder", encoding="utf-8")
+    xlsx_path.write_text("placeholder", encoding="utf-8")
+
+    docx_target = converter.target_path_for(task, docx_path)
+    xlsx_target = converter.target_path_for(task, xlsx_path)
+
+    assert docx_target.name == "A.docx.md"
+    assert xlsx_target.name == "A.xlsx.md"
+    assert docx_target != xlsx_target
 
 
 def test_convert_text_file_to_markdown(tmp_path: Path) -> None:

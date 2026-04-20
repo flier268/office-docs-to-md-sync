@@ -77,7 +77,7 @@ The included example mounts `./data` to `/data` for the app database and runtime
 
 ## GitHub release
 
-- Pushing a tag like `v0.1.0` runs `.github/workflows/release.yml` and publishes the PyInstaller Linux bundle to GitHub Releases.
+- Pushing a tag like `v0.1.0` runs `.github/workflows/release.yml` and publishes both the PyInstaller Linux bundle and Windows bundle to GitHub Releases.
 - You can also run the same workflow manually from the GitHub Actions UI by selecting a branch, then providing a full `v*` tag such as `v0.1.0`. If the tag does not exist yet, the workflow creates and pushes it from the selected branch before publishing the release.
-- The same workflow also publishes Docker images to `ghcr.io/<owner>/<repo>` with tags `vX.Y.Z`, `X.Y.Z`, and `latest`.
+- The same workflow also publishes multi-arch Docker images to `ghcr.io/<owner>/<repo>` with tags `vX.Y.Z`, `X.Y.Z`, and `latest` for both `linux/amd64` and `linux/arm64`.
 - If the release for that tag already exists, the workflow updates the release and replaces old assets. Re-pushing the same image tag to GHCR also replaces the previous image manifest for that tag.

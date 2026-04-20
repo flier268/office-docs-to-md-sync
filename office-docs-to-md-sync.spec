@@ -6,7 +6,12 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 project_root = Path.cwd()
 
 datas = collect_data_files("app", includes=["static/*.html", "static/*.js", "static/*.css"])
+datas += collect_data_files("markitdown")
+
+# `markitdown` is imported lazily inside the converter, so PyInstaller does not
+# detect it reliably unless we include it explicitly.
 hiddenimports = collect_submodules("uvicorn")
+hiddenimports += collect_submodules("markitdown")
 
 
 a = Analysis(

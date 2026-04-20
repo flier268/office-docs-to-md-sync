@@ -18,7 +18,7 @@ Local web app for Windows and Linux that watches folders, converts Office docume
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .[dev]
-python3 run.py
+office-docs-to-md-sync
 ```
 
 Open `http://127.0.0.1:8080`.
@@ -49,14 +49,14 @@ Windows PowerShell:
 pytest
 ```
 
-## Build package
+## Build binary
 
 ```bash
-python -m pip install build
-python -m build
+python -m pip install pyinstaller
+pyinstaller --noconfirm office-docs-to-md-sync.spec
 ```
 
-The generated wheel includes the web UI static assets and exposes the `office-docs-to-md-sync` command.
+The generated binary bundle is written to `dist/office-docs-to-md-sync/` and includes the web UI static assets.
 The packaged dependency set is intentionally limited to the `markitdown` extras this app targets: `docx`, `pptx`, `xlsx`, and `pdf`.
 
 ## Docker
@@ -77,7 +77,7 @@ The included example mounts `./data` to `/data` for the app database and runtime
 
 ## GitHub release
 
-- Pushing a tag like `v0.1.0` runs `.github/workflows/release.yml` and publishes the wheel and sdist to GitHub Releases.
+- Pushing a tag like `v0.1.0` runs `.github/workflows/release.yml` and publishes the PyInstaller Linux bundle to GitHub Releases.
 - You can also run the same workflow manually with an existing `v*` tag from the GitHub Actions UI.
 - The same workflow also publishes Docker images to `ghcr.io/<owner>/<repo>` with tags `vX.Y.Z`, `X.Y.Z`, and `latest`.
 - If the release for that tag already exists, the workflow updates the release and replaces old assets. Re-pushing the same image tag to GHCR also replaces the previous image manifest for that tag.

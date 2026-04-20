@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,7 +17,16 @@ from .sync_engine import SyncEngine
 from .validation import TaskValidationError, validate_task
 
 
-STATIC_DIR = Path(__file__).parent / "static"
+def resolve_static_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        bundle_root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+        return bundle_root / "app" / "static"
+    return Path(__file__).resolve().parent / "static"
+
+
+STATIC_DIR = resolve_static_dir()
+
+
 def create_app(data_dir: Path | None = None) -> FastAPI:
     resolved_data_dir = data_dir or Path(os.getenv("APP_DATA_DIR", ".localdata"))
     storage = Storage(resolved_data_dir / "app.db")
@@ -136,4 +146,8 @@ def main() -> None:
 
     host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", "8080"))
-    uvicorn.run("app.main:app", host=host, port=port, reload=False)
+    uvicorn.run(app, host=host, port=port, reload=False)
+
+
+if __name__ == "__main__":
+    main()

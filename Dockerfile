@@ -9,31 +9,28 @@ RUN apk add --no-cache build-base git libffi-dev
 WORKDIR /src
 
 COPY pyproject.toml README.md ./
+COPY run_app.py ./
 COPY app ./app
+COPY office-docs-to-md-sync.spec ./
 
-RUN python -m pip install --upgrade pip build \
-    && python -m build \
-    && mkdir -p /wheels \
-    && python -m pip wheel --no-cache-dir --wheel-dir /wheels /src/dist/*.whl
+RUN python -m pip install --upgrade pip \
+    && python -m pip install --no-cache-dir . pyinstaller \
+    && pyinstaller --noconfirm office-docs-to-md-sync.spec
 
 
-FROM python:3.12-alpine
+FROM alpine:3.22
 
-ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    HOST=0.0.0.0 \
+ENV HOST=0.0.0.0 \
     PORT=8080 \
     APP_DATA_DIR=/data
 
-RUN apk add --no-cache git libstdc++
+RUN apk add --no-cache git libgcc libstdc++
 
 WORKDIR /app
 
-COPY --from=builder /wheels /wheels
+COPY --from=builder /src/dist/office-docs-to-md-sync /app/office-docs-to-md-sync
 
-RUN python -m pip install --no-cache-dir --no-index --find-links=/wheels /wheels/office_docs_to_md_sync-*.whl \
-    && rm -rf /wheels
+RUN ln -s /app/office-docs-to-md-sync/office-docs-to-md-sync /usr/local/bin/office-docs-to-md-sync
 
 EXPOSE 8080
 

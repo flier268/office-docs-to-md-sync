@@ -14,7 +14,10 @@ After=network.target
 
 [Service]
 WorkingDirectory=${APP_DIR}
-ExecStart=${APP_DIR}/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080
+Environment=HOST=127.0.0.1
+Environment=PORT=8080
+Environment=APP_DATA_DIR=${APP_DIR}/.localdata
+ExecStart=${APP_DIR}/dist/office-docs-to-md-sync/office-docs-to-md-sync
 Restart=on-failure
 User=${USER_NAME}
 

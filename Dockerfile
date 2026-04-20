@@ -11,6 +11,7 @@ WORKDIR /src
 COPY pyproject.toml README.md ./
 COPY run_app.py ./
 COPY app ./app
+COPY markitdown ./markitdown
 COPY office-docs-to-md-sync.spec ./
 
 RUN python -m pip install --upgrade pip \

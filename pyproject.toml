@@ -30,7 +30,7 @@ build-backend = "setuptools.build_meta"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["app*"]
+include = ["app*", "markitdown*"]
 
 [tool.setuptools.package-data]
 app = ["static/*.html", "static/*.js", "static/*.css"]

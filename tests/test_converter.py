@@ -1,3 +1,4 @@
+import importlib
 from pathlib import Path
 
 import pytest
@@ -56,3 +57,9 @@ def test_convert_office_file_requires_markitdown_dependency(tmp_path: Path, monk
 
     with pytest.raises(RuntimeError, match="MarkItDown dependency is unavailable in this build"):
         converter.convert_path(task, source_path)
+
+
+def test_markitdown_compat_shim_reexports_markitdown_class() -> None:
+    shim_module = importlib.import_module("markitdown")
+
+    assert shim_module.MarkItDown is not None

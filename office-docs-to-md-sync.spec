@@ -8,9 +8,10 @@ project_root = Path.cwd()
 datas = collect_data_files("app", includes=["static/*.html", "static/*.js", "static/*.css"])
 datas += collect_data_files("markitdown_no_magika")
 
-# `markitdown_no_magika` is used for Office conversion, so we include it
-# detect it reliably unless we include it explicitly.
-hiddenimports = collect_submodules("uvicorn")
+# The app imports `markitdown_no_magika` directly, but some packaged runtime
+# paths still resolve the canonical `markitdown` module name.
+hiddenimports = ["markitdown"]
+hiddenimports += collect_submodules("uvicorn")
 hiddenimports += collect_submodules("markitdown_no_magika")
 
 

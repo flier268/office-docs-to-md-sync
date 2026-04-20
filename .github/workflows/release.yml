@@ -220,7 +220,7 @@ jobs:
       - name: Smoke test builder environment
         run: |
           docker build --target builder -t office-docs-to-md-sync-builder-smoke .
-          docker run --rm office-docs-to-md-sync-builder-smoke python -c "import app.converter, markitdown, markitdown_no_magika"
+          docker run --rm office-docs-to-md-sync-builder-smoke python -c "import app.converter, markitdown_no_magika"
 
       - name: Generate Docker metadata
         id: meta

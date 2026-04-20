@@ -8,10 +8,9 @@ project_root = Path.cwd()
 datas = collect_data_files("app", includes=["static/*.html", "static/*.js", "static/*.css"])
 datas += collect_data_files("markitdown_no_magika")
 
-# The app imports `markitdown_no_magika` directly, but some packaged runtime
-# paths still resolve the canonical `markitdown` module name.
-hiddenimports = ["markitdown"]
-hiddenimports += collect_submodules("uvicorn")
+# The app imports `markitdown_no_magika` directly, so we include its modules
+# and data explicitly for PyInstaller's static analysis.
+hiddenimports = collect_submodules("uvicorn")
 hiddenimports += collect_submodules("markitdown_no_magika")
 
 

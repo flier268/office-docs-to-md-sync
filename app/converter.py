@@ -5,6 +5,11 @@ from pathlib import Path
 
 from .models import SyncTask
 
+try:
+    from markitdown_no_magika import MarkItDown
+except ModuleNotFoundError:  # pragma: no cover - depends on installed extras/build output
+    MarkItDown = None
+
 
 class Converter:
     def __init__(self) -> None:
@@ -23,14 +28,14 @@ class Converter:
         if ext in task.file_rules.text_extensions:
             text = source_path.read_text(encoding="utf-8", errors="ignore")
             return text
+        if MarkItDown is None:
+            raise RuntimeError("MarkItDown dependency is unavailable in this build")
         if self._engine is None:
             warnings.filterwarnings(
                 "ignore",
                 message="Couldn't find ffmpeg or avconv - defaulting to ffmpeg, but may not work",
                 category=RuntimeWarning,
             )
-            from markitdown import MarkItDown
-
             self._engine = MarkItDown()
         result = self._engine.convert(str(source_path))
         return result.text_content

@@ -14,6 +14,7 @@ Latest container image: `ghcr.io/flier268/office-docs-to-md-sync:latest`
 - Office conversion via `markitdown`
 - Direct Markdown output for text files such as `txt`, `md`, `csv`, `tsv`, and custom extensions
 - Full mirror behavior for deletes and renames
+- File event watching with periodic hash-based scans to catch missed changes
 - Optional Git init, commit, and delayed push per task
 - SQLite-backed config and event history
 - Windows service and systemd install scripts
@@ -33,6 +34,8 @@ Open `http://127.0.0.1:8080`.
 
 - Set the task `target_root` as the repository root and output workspace.
 - Set `output_subdir` to choose where generated Markdown lives under the target root.
+- Each target repo keeps `.office-docs-sync-state.json` at the repo root with per-task source file hashes and output mappings.
+- The app still uses filesystem events for low-latency sync, but every task also runs a periodic hash scan to catch missed updates and deletes.
 - Auto push uses the system git credential or SSH setup already present on the machine.
 
 ## Service install

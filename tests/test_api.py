@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.main import create_app
-from app.models import SyncTask, TaskGitConfig, TaskPaths
+from app.models import SyncTask, TaskFileRules, TaskGitConfig, TaskPaths
 
 
 def route_endpoint(app, path: str, method: str = "GET"):
@@ -20,11 +20,13 @@ def test_list_tasks(tmp_path: Path) -> None:
         SyncTask(
             name="Task API",
             paths=TaskPaths(source_dir=str(tmp_path / "src"), target_root=str(tmp_path / "dst"), output_subdir="md"),
+            file_rules=TaskFileRules(scan_interval_seconds=45.0),
         )
     )
     endpoint = route_endpoint(app, "/api/tasks")
     tasks = endpoint()
     assert tasks[0].name == "Task API"
+    assert tasks[0].file_rules.scan_interval_seconds == 45.0
 
 
 def test_create_task_rejects_invalid_git_scope(tmp_path: Path) -> None:
@@ -68,3 +70,20 @@ def test_delete_and_toggle_task(tmp_path: Path) -> None:
     assert enabled.enabled is True
     assert deleted["status"] == "deleted"
     assert app.state.storage.get_task(created.id) is None
+
+
+def test_system_status_includes_last_scan_at(tmp_path: Path) -> None:
+    app = create_app(tmp_path / "data")
+    created = app.state.storage.create_task(
+        SyncTask(
+            name="Status API",
+            paths=TaskPaths(source_dir=str(tmp_path / "src"), target_root=str(tmp_path / "dst"), output_subdir="md"),
+        )
+    )
+    app.state.engine.statuses[created.id] = app.state.engine._ensure_status(created.id)
+    app.state.engine.statuses[created.id].last_scan_at = created.created_at
+
+    endpoint = route_endpoint(app, "/api/system/status")
+    status = endpoint()
+
+    assert status.statuses[0].last_scan_at == created.created_at

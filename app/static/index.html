@@ -22,7 +22,7 @@
 
       <section class="panel">
         <h2>Create Task</h2>
-        <p id="form-mode" class="muted">New task. Target is the output workspace and Git root. Sync runs after the file has been idle for the debounce interval, checked every 0.5 seconds.</p>
+        <p id="form-mode" class="muted">New task. Target is the output workspace and Git root. Sync uses file events for quick pickup and a 30 second periodic scan as fallback.</p>
         <p id="form-message" class="message" hidden></p>
         <form id="task-form">
           <input name="task_id" type="hidden">
@@ -36,6 +36,7 @@
             <label>Office Extensions<input name="office_extensions" value=".doc,.docx,.ppt,.pptx,.xls,.xlsx,.pdf"></label>
             <label>Text Extensions<input name="text_extensions" value=".txt,.md,.markdown,.csv,.tsv,.log"></label>
             <label>Debounce Seconds<input name="debounce_seconds" type="number" step="0.1" value="1.5"></label>
+            <label>Scan Interval Seconds<input name="scan_interval_seconds" type="number" step="1" min="5" value="30"></label>
             <label>Git Enabled<select name="git_enabled"><option value="false">No</option><option value="true">Yes</option></select></label>
             <label>Branch<input name="branch" value="main"></label>
             <label>Remote<input name="remote_name" value="origin"></label>

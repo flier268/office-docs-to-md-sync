@@ -41,6 +41,7 @@ function taskPayload(formData) {
       office_extensions: parseList(formData.get("office_extensions")),
       text_extensions: parseList(formData.get("text_extensions")),
       debounce_seconds: Number(formData.get("debounce_seconds")),
+      scan_interval_seconds: Number(formData.get("scan_interval_seconds")),
     },
     git: {
       enabled: formData.get("git_enabled") === "true",
@@ -84,6 +85,7 @@ function populateForm(task) {
   taskForm.elements.office_extensions.value = task.file_rules.office_extensions.join(",");
   taskForm.elements.text_extensions.value = task.file_rules.text_extensions.join(",");
   taskForm.elements.debounce_seconds.value = task.file_rules.debounce_seconds;
+  taskForm.elements.scan_interval_seconds.value = task.file_rules.scan_interval_seconds;
   taskForm.elements.git_enabled.value = String(task.git.enabled);
   taskForm.elements.branch.value = task.git.branch;
   taskForm.elements.remote_name.value = task.git.remote_name;
@@ -91,7 +93,7 @@ function populateForm(task) {
   taskForm.elements.auto_push.value = String(task.git.auto_push);
   taskForm.elements.push_delay_seconds.value = task.git.push_delay_seconds;
   taskForm.elements.commit_message_template.value = task.git.commit_message_template;
-  formMode.textContent = `Editing task #${task.id}. Target is the Git root, output writes to '${task.paths.output_subdir}', and sync runs after ${task.file_rules.debounce_seconds} seconds idle plus the 0.5 second worker scan.`;
+  formMode.textContent = `Editing task #${task.id}. Target is the Git root, output writes to '${task.paths.output_subdir}', and sync uses file events plus a ${task.file_rules.scan_interval_seconds} second periodic scan with ${task.file_rules.debounce_seconds} seconds idle debounce.`;
   submitButton.textContent = "Update Task";
   cancelEditButton.hidden = false;
   setFormMessage("");
@@ -114,7 +116,8 @@ function resetForm() {
   taskForm.elements.commit_message_template.value = "auto: sync {task_name}";
   taskForm.elements.office_extensions.value = ".doc,.docx,.ppt,.pptx,.xls,.xlsx,.pdf";
   taskForm.elements.text_extensions.value = ".txt,.md,.markdown,.csv,.tsv,.log";
-  formMode.textContent = "New task. Target is the output workspace and Git root. Sync runs after the file has been idle for the debounce interval, checked every 0.5 seconds.";
+  taskForm.elements.scan_interval_seconds.value = "30";
+  formMode.textContent = "New task. Target is the output workspace and Git root. Sync uses file events for quick pickup and a 30 second periodic scan as fallback.";
   submitButton.textContent = "Save Task";
   cancelEditButton.hidden = true;
 }
@@ -131,8 +134,9 @@ function buildTaskCard(task, taskStatus, events) {
     <p><strong>Enabled:</strong> ${task.enabled ? "Yes" : "No"}</p>
     <p><strong>Git:</strong> ${task.git.enabled ? "Enabled" : "Disabled"}</p>
     <p><strong>Git Root:</strong> ${task.paths.target_root}</p>
-    <p><strong>Sync Timing:</strong> file idle ${task.file_rules.debounce_seconds}s, worker scan 0.5s</p>
+    <p><strong>Sync Timing:</strong> event debounce ${task.file_rules.debounce_seconds}s, periodic scan ${task.file_rules.scan_interval_seconds}s</p>
     <p><strong>Running:</strong> ${taskStatus?.running ? "Yes" : "No"}</p>
+    <p><strong>Last Scan:</strong> ${taskStatus?.last_scan_at ? new Date(taskStatus.last_scan_at).toLocaleString() : "Never"}</p>
     <p><strong>Last Error:</strong> ${taskStatus?.last_error || "None"}</p>
     <div class="actions">
       <button data-action="edit" data-id="${task.id}" type="button">Edit</button>

@@ -62,6 +62,7 @@ class TaskFileRules(BaseModel):
     office_extensions: list[str] = Field(default_factory=lambda: DEFAULT_OFFICE_EXTENSIONS.copy())
     text_extensions: list[str] = Field(default_factory=lambda: DEFAULT_TEXT_EXTENSIONS.copy())
     debounce_seconds: float = Field(default=1.5, ge=0.1, le=30.0)
+    scan_interval_seconds: float = Field(default=30.0, ge=5.0, le=3600.0)
 
     @field_validator("office_extensions", "text_extensions")
     @classmethod
@@ -102,6 +103,7 @@ class TaskStatus(BaseModel):
     task_id: int
     running: bool
     last_run_at: datetime | None = None
+    last_scan_at: datetime | None = None
     last_push_at: datetime | None = None
     queued_paths: list[str] = Field(default_factory=list)
     last_error: str | None = None

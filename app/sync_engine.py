@@ -18,9 +18,7 @@ from .converter import Converter
 from .git_ops import GitManager
 from .models import SyncEvent, SyncTask, TaskStatus
 from .storage import Storage
-
-MANIFEST_NAME = ".office-docs-sync-state.json"
-MANIFEST_VERSION = 1
+from .sync_state import MANIFEST_NAME, MANIFEST_VERSION
 
 
 class TaskEventHandler(FileSystemEventHandler):

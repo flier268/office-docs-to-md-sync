@@ -52,6 +52,25 @@ def test_sync_engine_commits_inside_target_root(tmp_path: Path) -> None:
     assert engine.statuses[task.id or 0].last_error is None
     assert (Path(task.paths.target_root) / ".git").exists()
     assert (Path(task.paths.target_root) / task.paths.output_subdir / "123.md.md").exists()
+    assert (Path(task.paths.target_root) / MANIFEST_NAME).exists()
+
+
+def test_sync_engine_git_commit_includes_manifest(tmp_path: Path) -> None:
+    storage = Storage(tmp_path / "app.db")
+    task = create_task(storage, tmp_path, git_enabled=True)
+    engine = SyncEngine(storage, Converter(), GitManager())
+    source_file = Path(task.paths.source_dir) / "123.md"
+    source_file.write_text("hello\n", encoding="utf-8")
+
+    engine.queue_path(task.id or 0, str(source_file))
+    engine.queued_paths[task.id or 0][source_file] = 0
+    engine._process_task_queue(task)
+
+    repo = engine.git_manager.ensure_repo(task)
+    committed_files = repo.git.show("--name-only", "--pretty=format:", "HEAD").splitlines()
+
+    assert task.paths.output_subdir + "/123.md.md" in committed_files
+    assert MANIFEST_NAME in committed_files
 
 
 def test_reload_tasks_clears_queue_on_disable_and_removes_deleted_task(tmp_path: Path) -> None:

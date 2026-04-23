@@ -7,6 +7,7 @@ from git import Repo
 from git.exc import GitCommandError, InvalidGitRepositoryError, NoSuchPathError
 
 from .models import SyncTask
+from .sync_state import MANIFEST_NAME
 
 
 class GitManager:
@@ -33,10 +34,12 @@ class GitManager:
             raise ValueError("output directory must be inside the Git working tree")
         relative_target = target_dir.relative_to(working_tree)
         scope = "." if str(relative_target) == "." else str(relative_target)
-        scoped_status = repo.git.status("--porcelain", "--", scope)
+        manifest_path = working_tree / MANIFEST_NAME
+        manifest_scope = manifest_path.relative_to(working_tree).as_posix()
+        scoped_status = repo.git.status("--porcelain", "--", scope, manifest_scope)
         if not scoped_status.strip():
             return None
-        repo.git.add("--all", "--", scope)
+        repo.git.add("--all", "--", scope, manifest_scope)
         message = task.git.commit_message_template.format(task_name=task.name)
         commit = repo.index.commit(message)
         if task.git.auto_push:

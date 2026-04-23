@@ -118,7 +118,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         try:
-            git_manager.ensure_repo(task).remote(task.git.remote_name).push(task.git.branch)
+            git_manager.push(task)
         except Exception as exc:  # pragma: no cover - external
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"status": "pushed"}

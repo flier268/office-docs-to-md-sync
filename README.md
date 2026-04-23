@@ -36,7 +36,8 @@ Open `http://127.0.0.1:8080`.
 - Set `output_subdir` to choose where generated Markdown lives under the target root.
 - Each target repo keeps `.office-docs-sync-state.json` at the repo root with per-task source file hashes and output mappings.
 - The app still uses filesystem events for low-latency sync, but every task also runs a periodic hash scan to catch missed updates and deletes.
-- Auto push uses the system git credential or SSH setup already present on the machine.
+- Auto push uses the system git credential or SSH setup already present on the machine by default.
+- For HTTPS remotes in containers, set a task-scoped PAT environment variable named from the task name plus `_key`. Non-word characters in the task name become `_`; for example task `Docs Sync` reads `Docs_Sync_key` (uppercase `DOCS_SYNC_KEY` is also accepted). The token is injected only for the git push process through `GIT_ASKPASS`.
 
 ## Service install
 

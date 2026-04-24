@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import threading
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
+from errno import EXDEV
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -279,11 +281,17 @@ class SyncEngine:
         path = self._manifest_path(task)
         path.parent.mkdir(parents=True, exist_ok=True)
         manifest["version"] = MANIFEST_VERSION
-        with NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as temp_file:
+        with NamedTemporaryFile("w", encoding="utf-8", delete=False) as temp_file:
             json.dump(manifest, temp_file, indent=2, sort_keys=True)
             temp_file.write("\n")
             temp_path = Path(temp_file.name)
-        temp_path.replace(path)
+        try:
+            temp_path.replace(path)
+        except OSError as exc:
+            if exc.errno != EXDEV:
+                temp_path.unlink(missing_ok=True)
+                raise
+            shutil.move(str(temp_path), str(path))
 
     def _manifest_task_files(self, task: SyncTask) -> dict[str, dict[str, str]]:
         manifest = self._load_manifest(task)

@@ -1,4 +1,5 @@
 import json
+import tempfile
 from pathlib import Path
 
 from app.converter import Converter
@@ -111,6 +112,21 @@ def test_periodic_scan_detects_new_file_and_updates_manifest(tmp_path: Path) -> 
 
     assert target_file.read_text(encoding="utf-8") == "hello\n"
     assert manifest["tasks"][str(task.id)]["files"]["new.md"]["target_relpath"] == "md/new.md.md"
+
+
+def test_manifest_temp_file_is_created_outside_target_root(tmp_path: Path) -> None:
+    storage = Storage(tmp_path / "app.db")
+    task = create_task(storage, tmp_path)
+    engine = SyncEngine(storage, Converter(), GitManager())
+
+    engine._write_manifest(task, {"tasks": {}})
+
+    temp_entries = list(Path(task.paths.target_root).glob("tmp*"))
+    manifest_path = Path(task.paths.target_root) / MANIFEST_NAME
+
+    assert manifest_path.exists()
+    assert temp_entries == []
+    assert manifest_path.parent != Path(tempfile.gettempdir())
 
 
 def test_periodic_scan_uses_hash_to_detect_changes(tmp_path: Path) -> None:

@@ -23,9 +23,14 @@ FROM alpine:3.22
 
 ENV HOST=0.0.0.0 \
     PORT=8080 \
-    APP_DATA_DIR=/data
+    APP_DATA_DIR=/data \
+    HOME=/home/app
 
-RUN apk add --no-cache git libgcc libstdc++
+RUN apk add --no-cache git libgcc libstdc++ \
+    && addgroup -S -g 1000 app \
+    && adduser -S -D -h /home/app -u 1000 -G app app \
+    && mkdir -p /data /home/app \
+    && chown app:app /data /home/app
 
 WORKDIR /app
 
@@ -36,5 +41,7 @@ RUN ln -s /app/office-docs-to-md-sync/office-docs-to-md-sync /usr/local/bin/offi
 EXPOSE 8080
 
 VOLUME ["/data"]
+
+USER app:app
 
 CMD ["office-docs-to-md-sync"]

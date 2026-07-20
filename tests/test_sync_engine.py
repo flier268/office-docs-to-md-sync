@@ -1,6 +1,12 @@
 import json
+import sqlite3
 import tempfile
+import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 
 from app.converter import Converter
 from app.git_ops import GitManager
@@ -37,6 +43,71 @@ def test_sync_engine_copies_markdown_file(tmp_path: Path) -> None:
 
     target_file = Path(task.paths.target_root) / task.paths.output_subdir / "123.md.md"
     assert target_file.read_text(encoding="utf-8") == "hello\n"
+
+
+def test_record_error_survives_readonly_event_database(tmp_path: Path, monkeypatch) -> None:
+    storage = Storage(tmp_path / "app.db")
+    task = create_task(storage, tmp_path)
+    engine = SyncEngine(storage, Converter(), GitManager())
+
+    def fail_to_add_event(*_args, **_kwargs):
+        raise sqlite3.OperationalError("attempt to write a readonly database")
+
+    monkeypatch.setattr(storage, "add_event", fail_to_add_event)
+
+    engine._record_error(task.id or 0, "conversion failed")
+
+    assert engine.statuses[task.id or 0].last_error == "conversion failed"
+
+
+def test_sync_engine_uses_apscheduler_for_processing_and_scans(tmp_path: Path) -> None:
+    storage = Storage(tmp_path / "app.db")
+    task = create_task(storage, tmp_path)
+    engine = SyncEngine(storage, Converter(), GitManager())
+
+    engine.reload_tasks()
+
+    process_job = engine.scheduler.get_job("process-task-queues")
+    scan_job = engine.scheduler.get_job(f"scan-task-{task.id}")
+
+    assert isinstance(engine.scheduler, BackgroundScheduler)
+    assert isinstance(process_job.trigger, IntervalTrigger)
+    assert process_job.trigger.interval == timedelta(seconds=0.5)
+    assert process_job.max_instances == 1
+    assert process_job.coalesce is True
+    assert process_job.misfire_grace_time is None
+    assert isinstance(scan_job.trigger, IntervalTrigger)
+    assert scan_job.trigger.interval == timedelta(seconds=5)
+    assert scan_job.max_instances == 1
+    assert scan_job.coalesce is True
+    assert scan_job.misfire_grace_time is None
+
+
+def test_shutdown_does_not_wait_for_running_scheduler_job(tmp_path: Path) -> None:
+    storage = Storage(tmp_path / "app.db")
+    engine = SyncEngine(storage, Converter(), GitManager())
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocking_job() -> None:
+        started.set()
+        release.wait(timeout=5)
+
+    engine.scheduler.remove_all_jobs()
+    engine.scheduler.add_job(blocking_job, "date", run_date=datetime.now(timezone.utc))
+    engine.start()
+    shutdown_thread = threading.Thread(target=engine.shutdown)
+    try:
+        assert started.wait(timeout=2)
+        shutdown_thread.start()
+        shutdown_thread.join(timeout=0.5)
+        assert not shutdown_thread.is_alive()
+    finally:
+        release.set()
+        if shutdown_thread.ident is not None:
+            shutdown_thread.join(timeout=2)
+        if engine.scheduler.running:
+            engine.shutdown()
 
 
 def test_sync_engine_commits_inside_target_root(tmp_path: Path) -> None:

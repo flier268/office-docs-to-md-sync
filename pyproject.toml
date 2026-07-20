@@ -5,6 +5,7 @@ description = "Local web app for watching Office documents and syncing them as M
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "apscheduler>=3.11.0,<4.0.0",
   "fastapi>=0.115.0,<1.0.0",
   "gitpython>=3.1.43,<4.0.0",
   "markitdown-no-magika[docx,pptx,xlsx,xls,pdf]>=0.1.2",

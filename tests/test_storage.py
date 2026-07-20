@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from app.models import SyncEvent, SyncTask, TaskPaths
@@ -17,6 +18,31 @@ def test_storage_round_trip(tmp_path: Path) -> None:
 
     assert fetched is not None
     assert fetched.name == "Task A"
+
+
+def test_list_tasks_skips_invalid_task_config_without_repeating_log(tmp_path: Path, caplog) -> None:
+    storage = Storage(tmp_path / "app.db")
+    invalid = storage.create_task(
+        SyncTask(
+            name="Invalid",
+            paths=TaskPaths(source_dir=str(tmp_path / "bad-src"), target_root=str(tmp_path / "bad-dst")),
+        )
+    )
+    valid = storage.create_task(
+        SyncTask(
+            name="Valid",
+            paths=TaskPaths(source_dir=str(tmp_path / "src"), target_root=str(tmp_path / "dst")),
+        )
+    )
+    with storage.connect() as connection:
+        connection.execute("UPDATE tasks SET config_json = ? WHERE id = ?", ("{", invalid.id))
+
+    with caplog.at_level(logging.ERROR):
+        tasks = storage.list_tasks()
+        storage.list_tasks()
+
+    assert [task.id for task in tasks] == [valid.id]
+    assert sum(record.message.startswith("Skipping invalid task configuration") for record in caplog.records) == 1
 
 
 def test_add_event(tmp_path: Path) -> None:

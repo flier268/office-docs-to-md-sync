@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
+import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,9 +12,14 @@ from typing import Iterator
 from .models import SyncEvent, SyncTask
 
 
+logger = logging.getLogger(__name__)
+
+
 class Storage:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
+        self._invalid_task_ids: set[int] = set()
+        self._invalid_task_ids_lock = threading.Lock()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 
@@ -53,12 +60,17 @@ class Storage:
     def list_tasks(self) -> list[SyncTask]:
         with self.connect() as conn:
             rows = conn.execute("SELECT * FROM tasks ORDER BY id").fetchall()
-        return [self._row_to_task(row) for row in rows]
+        tasks = []
+        for row in rows:
+            task = self._row_to_task_or_none(row)
+            if task is not None:
+                tasks.append(task)
+        return tasks
 
     def get_task(self, task_id: int) -> SyncTask | None:
         with self.connect() as conn:
             row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
-        return self._row_to_task(row) if row else None
+        return self._row_to_task_or_none(row) if row else None
 
     def create_task(self, task: SyncTask) -> SyncTask:
         now = self._utcnow()
@@ -138,6 +150,21 @@ class Storage:
         payload["created_at"] = row["created_at"]
         payload["updated_at"] = row["updated_at"]
         return SyncTask.model_validate(payload)
+
+    def _row_to_task_or_none(self, row: sqlite3.Row) -> SyncTask | None:
+        task_id = int(row["id"])
+        try:
+            task = self._row_to_task(row)
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            with self._invalid_task_ids_lock:
+                should_log = task_id not in self._invalid_task_ids
+                self._invalid_task_ids.add(task_id)
+            if should_log:
+                logger.exception("Skipping invalid task configuration for task %s", task_id)
+            return None
+        with self._invalid_task_ids_lock:
+            self._invalid_task_ids.discard(task_id)
+        return task
 
     def _row_to_event(self, row: sqlite3.Row) -> SyncEvent:
         return SyncEvent.model_validate(dict(row))

@@ -73,17 +73,28 @@ The packaged dependency set is intentionally limited to the `markitdown` extras 
 
 ```bash
 docker build -t office-docs-to-md-sync .
+mkdir -p .localdata
 docker run --rm -p 8080:8080 -v "$(pwd)/.localdata:/data" office-docs-to-md-sync
 ```
+
+The container runs as the unprivileged `app` user with UID and GID `1000`.
+If you use a bind mount instead, make the mounted directories writable by UID and GID `1000`.
 
 ### Docker Compose
 
 ```bash
 cp docker-compose.example.yml docker-compose.yml
+mkdir -p data
 docker compose up -d
 ```
 
 The included example mounts `./data` to `/data` for the app database and runtime state.
+Compose uses UID and GID `1000` by default.
+Set `APP_UID=0` and `APP_GID=0` when the deployment must run as root:
+
+```bash
+APP_UID=0 APP_GID=0 docker compose up -d
+```
 
 ## GitHub release
 

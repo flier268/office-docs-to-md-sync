@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import shutil
 import threading
 import time
@@ -12,6 +13,9 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
+from apscheduler.executors.pool import ThreadPoolExecutor as SchedulerThreadPoolExecutor
+from apscheduler.jobstores.base import JobLookupError
+from apscheduler.schedulers.background import BackgroundScheduler
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.api import ObservedWatch
@@ -21,6 +25,12 @@ from .git_ops import GitManager
 from .models import SyncEvent, SyncTask, TaskStatus
 from .storage import Storage
 from .sync_state import MANIFEST_NAME, MANIFEST_VERSION
+
+
+logger = logging.getLogger(__name__)
+
+PROCESS_JOB_ID = "process-task-queues"
+SCAN_JOB_PREFIX = "scan-task-"
 
 
 class TaskEventHandler(FileSystemEventHandler):
@@ -47,21 +57,32 @@ class SyncEngine:
         self.task_configs: dict[int, SyncTask] = {}
         self.statuses: dict[int, TaskStatus] = {}
         self.queued_paths: dict[int, dict[Path, float]] = defaultdict(dict)
-        self.scan_due_at: dict[int, float] = {}
         self.lock = threading.Lock()
-        self.stop_event = threading.Event()
-        self.worker = threading.Thread(target=self._worker_loop, daemon=True)
+        self.scheduler = BackgroundScheduler(
+            executors={"default": SchedulerThreadPoolExecutor(max_workers=1)},
+            timezone=timezone.utc,
+        )
+        self.scheduler.add_job(
+            self._process_tasks,
+            "interval",
+            seconds=0.5,
+            id=PROCESS_JOB_ID,
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=None,
+            next_run_time=datetime.now(timezone.utc),
+        )
 
     def start(self) -> None:
         self.reload_tasks()
         self.observer.start()
-        self.worker.start()
+        self.scheduler.start()
 
     def shutdown(self) -> None:
-        self.stop_event.set()
+        if self.scheduler.running:
+            self.scheduler.shutdown(wait=False)
         self.observer.stop()
         self.observer.join(timeout=5)
-        self.worker.join(timeout=5)
 
     def reload_tasks(self) -> None:
         tasks = self.storage.list_tasks()
@@ -87,10 +108,12 @@ class SyncEngine:
                 watch = self.observer.schedule(handler, str(source_dir), recursive=task.paths.recursive)
                 self.handlers[task.id] = handler
                 self.watches[task.id] = watch
-            elif not task.enabled:
+            if task.enabled:
+                self._schedule_scan(task)
+            else:
                 self.statuses[task.id].running = False
-                self.scan_due_at.pop(task.id, None)
                 self._clear_task_queue(task.id)
+                self._remove_scan_job(task.id)
 
     def queue_path(self, task_id: int, path: str) -> None:
         self._queue_path(task_id, Path(path), ready=False)
@@ -99,7 +122,6 @@ class SyncEngine:
         task = self.storage.get_task(task_id)
         if not task:
             return
-        self.scan_due_at[task_id] = 0
         source_root = task.paths.source_path()
         iterator = source_root.rglob("*") if task.paths.recursive else source_root.glob("*")
         for path in iterator:
@@ -126,7 +148,7 @@ class SyncEngine:
         watch = self.watches.pop(task_id, None)
         if watch is not None:
             self.observer.unschedule(watch)
-        self.scan_due_at.pop(task_id, None)
+        self._remove_scan_job(task_id)
         self._clear_task_queue(task_id)
 
     def _clear_task_queue(self, task_id: int) -> None:
@@ -140,33 +162,54 @@ class SyncEngine:
         updated.last_push_at = self.git_manager.last_push_at(status.task_id)
         return updated
 
-    def _worker_loop(self) -> None:
-        while not self.stop_event.is_set():
-            tasks = self.storage.list_tasks()
-            now = time.time()
-            for task in tasks:
-                if task.id is None or not task.enabled:
-                    continue
-                try:
-                    self._scan_task_if_due(task, now)
-                    self._process_task_queue(task)
-                    pushed = self.git_manager.maybe_push(task)
-                except Exception as exc:  # pragma: no cover - defensive
-                    self._record_error(task.id, f"Worker failed: {exc}")
-                else:
-                    if pushed:
-                        self._record_event(task.id, "info", "Pushed committed changes.")
-            time.sleep(0.5)
+    def _process_tasks(self) -> None:
+        for task in self.storage.list_tasks():
+            if task.id is None or not task.enabled:
+                continue
+            try:
+                self._process_task_queue(task)
+                pushed = self.git_manager.maybe_push(task)
+            except Exception as exc:  # pragma: no cover - defensive
+                self._record_error(task.id, f"Worker failed: {exc}")
+            else:
+                if pushed:
+                    self._record_event(task.id, "info", "Pushed committed changes.")
 
-    def _scan_task_if_due(self, task: SyncTask, now: float) -> None:
+    def _schedule_scan(self, task: SyncTask) -> None:
         assert task.id is not None
-        due_at = self.scan_due_at.get(task.id, 0)
-        if now < due_at:
+        self.scheduler.add_job(
+            self._scan_task_job,
+            "interval",
+            seconds=task.file_rules.scan_interval_seconds,
+            args=[task.id],
+            id=self._scan_job_id(task.id),
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=None,
+            next_run_time=datetime.now(timezone.utc),
+            replace_existing=True,
+        )
+
+    def _scan_task_job(self, task_id: int) -> None:
+        task = self.storage.get_task(task_id)
+        if task is None or not task.enabled:
             return
-        self.scan_due_at[task.id] = now + task.file_rules.scan_interval_seconds
-        status = self._ensure_status(task.id)
-        status.last_scan_at = datetime.now(timezone.utc)
-        self._scan_task(task)
+        try:
+            status = self._ensure_status(task_id)
+            status.last_scan_at = datetime.now(timezone.utc)
+            self._scan_task(task)
+        except Exception as exc:  # pragma: no cover - defensive
+            self._record_error(task_id, f"Scan failed: {exc}")
+
+    def _remove_scan_job(self, task_id: int) -> None:
+        try:
+            self.scheduler.remove_job(self._scan_job_id(task_id))
+        except JobLookupError:
+            pass
+
+    @staticmethod
+    def _scan_job_id(task_id: int) -> str:
+        return f"{SCAN_JOB_PREFIX}{task_id}"
 
     def _scan_task(self, task: SyncTask) -> None:
         assert task.id is not None
@@ -261,7 +304,13 @@ class SyncEngine:
             return None
 
     def _record_event(self, task_id: int, level: str, message: str) -> None:
-        self.storage.add_event(SyncEvent(task_id=task_id, level=level, message=message))
+        try:
+            self.storage.add_event(SyncEvent(task_id=task_id, level=level, message=message))
+        except Exception as exc:
+            status = self._ensure_status(task_id)
+            if status.last_error is None:
+                status.last_error = f"Could not record {level} event: {exc}"
+            logger.exception("Could not persist %s event for task %s", level, task_id)
 
     def _record_error(self, task_id: int, message: str) -> None:
         status = self._ensure_status(task_id)

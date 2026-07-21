@@ -276,6 +276,15 @@ class SyncEngine:
                 self._record_event(task.id or 0, "info", f"Removed {target_path}")
             self._remove_manifest_entry(task, source_path)
             return
+        known = self._manifest_task_files(task).get(self._relative_source_key(task, source_path))
+        target_relpath = target_path.relative_to(task.paths.target_root_path()).as_posix()
+        if (
+            target_path.exists()
+            and known is not None
+            and known.get("sha256") == self._hash_file(source_path)
+            and known.get("target_relpath") == target_relpath
+        ):
+            return
         content = self.converter.convert_path(task, source_path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_text(content, encoding="utf-8")

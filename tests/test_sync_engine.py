@@ -218,6 +218,32 @@ def test_periodic_scan_uses_hash_to_detect_changes(tmp_path: Path) -> None:
     assert target_file.read_text(encoding="utf-8") == "v2\n"
 
 
+def test_file_event_does_not_reconvert_unchanged_source(tmp_path: Path, monkeypatch) -> None:
+    storage = Storage(tmp_path / "app.db")
+    task = create_task(storage, tmp_path)
+    converter = Converter()
+    engine = SyncEngine(storage, converter, GitManager())
+    source_file = Path(task.paths.source_dir) / "tracked.md"
+    source_file.write_text("hello\n", encoding="utf-8")
+
+    engine._scan_task(task)
+    engine._process_task_queue(task)
+    target_file = Path(task.paths.target_root) / task.paths.output_subdir / "tracked.md.md"
+    original_mtime = target_file.stat().st_mtime_ns
+
+    def fail_conversion(*_args, **_kwargs):
+        raise AssertionError("unchanged source must not be converted again")
+
+    monkeypatch.setattr(converter, "convert_path", fail_conversion)
+    engine.queue_path(task.id or 0, str(source_file))
+    engine.queued_paths[task.id or 0][source_file] = 0
+    engine._process_task_queue(task)
+
+    assert target_file.read_text(encoding="utf-8") == "hello\n"
+    assert target_file.stat().st_mtime_ns == original_mtime
+    assert engine.statuses[task.id or 0].last_error is None
+
+
 def test_periodic_scan_removes_deleted_output_and_manifest_entry(tmp_path: Path) -> None:
     storage = Storage(tmp_path / "app.db")
     task = create_task(storage, tmp_path)

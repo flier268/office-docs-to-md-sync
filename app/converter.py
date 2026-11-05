@@ -11,15 +11,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from .markitdown_tweaks import check_magika_stub
+from . import markitdown_tweaks as _markitdown_tweaks  # registers magika stub before markitdown import
 from .models import SyncTask
 
 try:
     from markitdown import MarkItDown
 except ModuleNotFoundError:  # pragma: no cover - depends on installed extras/build output
     MarkItDown = None
-else:
-    check_magika_stub()
 
 IMAGE_DIR_NAME = "references"
 

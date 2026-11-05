@@ -45,11 +45,12 @@ if _STUBBED:
 
 def check_magika_stub() -> None:
     """Fail when markitdown no longer calls magika the way the stub answers. A changed call could
-    reach what the stub lacks, and a release that drops magika no longer needs the stub at all."""
+    reach what the stub lacks, and a release that drops magika no longer needs the stub at all.
+
+    Call this from tests. Frozen binaries omit library .py files, so inspect.getsource cannot run
+    on the application start path.
+    """
     if not _STUBBED:
-        return
-    # PyInstaller omits library .py files, so inspect.getsource cannot run in the bundle.
-    if getattr(sys, "frozen", False):
         return
     from markitdown import MarkItDown
 

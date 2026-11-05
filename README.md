@@ -26,6 +26,7 @@ Latest container image: `ghcr.io/flier268/office-docs-to-md-sync:latest`
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .[dev]
+pip uninstall -y magika
 office-docs-to-md-sync
 ```
 
@@ -60,6 +61,8 @@ Windows PowerShell:
 pytest
 ```
 
+`pip install` still pulls magika as a markitdown extra. Uninstall it (`pip uninstall -y magika`) so `app.markitdown_tweaks` can stub the import. uv users get this from `[tool.uv] exclude-dependencies`.
+
 ## Build binary
 
 ```bash
@@ -68,7 +71,7 @@ pyinstaller --noconfirm office-docs-to-md-sync.spec
 ```
 
 The generated binary bundle is written to `dist/office-docs-to-md-sync/` and includes the web UI static assets.
-The packaged dependency set is intentionally limited to the `markitdown` extras this app targets: `docx`, `pptx`, `xlsx`, and `pdf`.
+The packaged dependency set is intentionally limited to the `markitdown` extras this app targets: `docx`, `pptx`, `xlsx`, `xls`, and `pdf`. Magika is excluded; a stub in `app.markitdown_tweaks` answers markitdown's type-sniff calls.
 
 ## Docker
 

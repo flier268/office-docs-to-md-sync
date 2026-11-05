@@ -6,12 +6,12 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 project_root = Path.cwd()
 
 datas = collect_data_files("app", includes=["static/*.html", "static/*.js", "static/*.css"])
-datas += collect_data_files("markitdown_no_magika")
+datas += collect_data_files("markitdown")
 
-# The app imports `markitdown_no_magika` directly, so we include its modules
+# The app imports `markitdown` directly, so we include its modules
 # and data explicitly for PyInstaller's static analysis.
 hiddenimports = collect_submodules("uvicorn")
-hiddenimports += collect_submodules("markitdown_no_magika")
+hiddenimports += collect_submodules("markitdown")
 
 
 a = Analysis(
@@ -23,7 +23,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=["magika", "onnxruntime"],
     noarchive=False,
     optimize=0,
 )

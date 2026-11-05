@@ -48,6 +48,9 @@ def check_magika_stub() -> None:
     reach what the stub lacks, and a release that drops magika no longer needs the stub at all."""
     if not _STUBBED:
         return
+    # PyInstaller omits library .py files, so inspect.getsource cannot run in the bundle.
+    if getattr(sys, "frozen", False):
+        return
     from markitdown import MarkItDown
 
     missing = [

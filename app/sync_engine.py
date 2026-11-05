@@ -20,7 +20,7 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.api import ObservedWatch
 
-from .converter import Converter
+from .converter import IMAGE_DIR_NAME, Converter
 from .git_ops import GitManager
 from .models import SyncEvent, SyncTask, TaskStatus
 from .storage import Storage
@@ -269,14 +269,15 @@ class SyncEngine:
 
     def _sync_path(self, task: SyncTask, source_path: Path) -> None:
         target_path = self.converter.target_path_for(task, source_path)
+        known = self._manifest_task_files(task).get(self._relative_source_key(task, source_path))
         if not source_path.exists() or not self.converter.is_supported(task, source_path):
+            self._remove_stale_images(task, list((known or {}).get("image_relpaths", [])), [], source_path)
             if target_path.exists():
                 target_path.unlink()
                 self._prune_empty_dirs(target_path.parent, task.paths.output_dir_path())
                 self._record_event(task.id or 0, "info", f"Removed {target_path}")
             self._remove_manifest_entry(task, source_path)
             return
-        known = self._manifest_task_files(task).get(self._relative_source_key(task, source_path))
         target_relpath = target_path.relative_to(task.paths.target_root_path()).as_posix()
         if (
             target_path.exists()
@@ -285,10 +286,13 @@ class SyncEngine:
             and known.get("target_relpath") == target_relpath
         ):
             return
-        content = self.converter.convert_path(task, source_path)
+        previous_images = list(known.get("image_relpaths", [])) if known else []
+        converted = self.converter.convert_path(task, source_path, target_path=target_path)
+        image_relpaths = self._managed_image_relpaths(task, target_path, converted.image_relpaths)
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_text(content, encoding="utf-8")
-        self._update_manifest_entry(task, source_path, target_path)
+        target_path.write_text(converted.markdown, encoding="utf-8")
+        self._remove_stale_images(task, previous_images, image_relpaths, source_path)
+        self._update_manifest_entry(task, source_path, target_path, image_relpaths)
         self._record_event(task.id or 0, "info", f"Synced {source_path} -> {target_path}")
 
     def _queue_path(self, task_id: int, file_path: Path, ready: bool) -> None:
@@ -351,7 +355,7 @@ class SyncEngine:
                 raise
             shutil.move(str(temp_path), str(path))
 
-    def _manifest_task_files(self, task: SyncTask) -> dict[str, dict[str, str]]:
+    def _manifest_task_files(self, task: SyncTask) -> dict[str, dict[str, Any]]:
         manifest = self._load_manifest(task)
         section = manifest.get("tasks", {}).get(str(task.id), {})
         files = section.get("files", {})
@@ -362,7 +366,13 @@ class SyncEngine:
     def _manifest_has_entry(self, task: SyncTask, source_path: Path) -> bool:
         return self._relative_source_key(task, source_path) in self._manifest_task_files(task)
 
-    def _update_manifest_entry(self, task: SyncTask, source_path: Path, target_path: Path) -> None:
+    def _update_manifest_entry(
+        self,
+        task: SyncTask,
+        source_path: Path,
+        target_path: Path,
+        image_relpaths: list[str] | None = None,
+    ) -> None:
         manifest = self._load_manifest(task)
         tasks = manifest.setdefault("tasks", {})
         section = tasks.setdefault(str(task.id), {})
@@ -372,8 +382,62 @@ class SyncEngine:
         files[self._relative_source_key(task, source_path)] = {
             "sha256": self._hash_file(source_path),
             "target_relpath": target_path.relative_to(task.paths.target_root_path()).as_posix(),
+            "image_relpaths": image_relpaths or [],
         }
         self._write_manifest(task, manifest)
+
+    def _managed_image_relpaths(self, task: SyncTask, target_path: Path, image_relpaths: tuple[str, ...] | list[str]) -> list[str]:
+        relpaths: list[str] = []
+        seen: set[str] = set()
+        root = task.paths.target_root_path().resolve()
+        for relative in image_relpaths:
+            image_path = (target_path.parent / relative).resolve()
+            try:
+                relpath = image_path.relative_to(root).as_posix()
+            except ValueError:
+                continue
+            if relpath not in seen:
+                seen.add(relpath)
+                relpaths.append(relpath)
+        return relpaths
+
+    def _other_image_relpaths(self, task: SyncTask, source_path: Path | None) -> set[str]:
+        skip_task = str(task.id)
+        skip_file = self._relative_source_key(task, source_path) if source_path is not None else None
+        referenced: set[str] = set()
+        for task_id, section in self._load_manifest(task).get("tasks", {}).items():
+            files = section.get("files", {})
+            if not isinstance(files, dict):
+                continue
+            for key, entry in files.items():
+                if task_id == skip_task and key == skip_file:
+                    continue
+                if isinstance(entry, dict):
+                    referenced.update(entry.get("image_relpaths") or [])
+        return referenced
+
+    def _remove_stale_images(
+        self,
+        task: SyncTask,
+        previous: list[str],
+        current: list[str],
+        source_path: Path | None = None,
+    ) -> None:
+        keep = set(current) | self._other_image_relpaths(task, source_path)
+        output_root = task.paths.output_dir_path().resolve()
+        for relpath in previous:
+            if relpath in keep:
+                continue
+            path = (task.paths.target_root_path() / relpath).resolve()
+            try:
+                path.relative_to(output_root)
+            except ValueError:
+                continue
+            if IMAGE_DIR_NAME not in path.parts:
+                continue
+            if path.exists() and path.is_file():
+                path.unlink()
+                self._prune_empty_dirs(path.parent, task.paths.output_dir_path())
 
     def _remove_manifest_entry(self, task: SyncTask, source_path: Path) -> None:
         manifest = self._load_manifest(task)

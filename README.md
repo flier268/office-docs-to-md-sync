@@ -12,6 +12,7 @@ Latest container image: `ghcr.io/flier268/office-docs-to-md-sync:latest`
 
 - Multiple sync tasks managed from a local web UI
 - Office conversion via `markitdown`
+- Embedded images saved under a `references` directory next to the Markdown file, named by SHA-256 of the image bytes and linked by relative path. Source updates add, overwrite, and remove those files. Documents in the same output folder share identical image files; a shared file is deleted only after the last document stops using it.
 - Direct Markdown output for text files such as `txt`, `md`, `csv`, `tsv`, and custom extensions
 - Full mirror behavior for deletes and renames
 - File event watching with periodic hash-based scans to catch missed changes

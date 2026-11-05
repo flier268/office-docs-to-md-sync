@@ -1,3 +1,4 @@
+import hashlib
 import json
 import sqlite3
 import tempfile
@@ -8,7 +9,7 @@ from pathlib import Path
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from app.converter import Converter
+from app.converter import ConversionResult, Converter
 from app.git_ops import GitManager
 from app.models import SyncTask, TaskFileRules, TaskGitConfig, TaskPaths
 from app.storage import Storage
@@ -264,6 +265,190 @@ def test_periodic_scan_removes_deleted_output_and_manifest_entry(tmp_path: Path)
 
     assert not target_file.exists()
     assert "gone.md" not in manifest["tasks"].get(str(task.id), {}).get("files", {})
+
+
+def _write_sha256_image(target_path: Path, payload: bytes) -> Path:
+    digest = hashlib.sha256(payload).hexdigest()
+    image_dir = target_path.parent / "references"
+    image_dir.mkdir(parents=True, exist_ok=True)
+    image_path = image_dir / f"{digest}.png"
+    image_path.write_bytes(payload)
+    return image_path
+
+
+def test_sync_engine_extracts_images_and_removes_them_with_source(tmp_path: Path, monkeypatch) -> None:
+    storage = Storage(tmp_path / "app.db")
+    task = create_task(storage, tmp_path)
+    converter = Converter()
+    engine = SyncEngine(storage, converter, GitManager())
+    source_file = Path(task.paths.source_dir) / "report.txt"
+    source_file.write_text("office-like\n", encoding="utf-8")
+    payload = b"png-bytes"
+
+    def fake_convert(task_arg, source_path, target_path=None):
+        assert target_path is not None
+        image_path = _write_sha256_image(target_path, payload)
+        rel = f"references/{image_path.name}"
+        return ConversionResult(f"![photo]({rel})\n", (rel,))
+
+    monkeypatch.setattr(converter, "convert_path", fake_convert)
+    engine.queue_path(task.id or 0, str(source_file))
+    engine.queued_paths[task.id or 0][source_file] = 0
+    engine._process_task_queue(task)
+
+    target_file = Path(task.paths.target_root) / task.paths.output_subdir / "report.txt.md"
+    image_file = _write_sha256_image(target_file, payload)
+    digest = image_file.stem
+    manifest_path = Path(task.paths.target_root) / MANIFEST_NAME
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    entry = manifest["tasks"][str(task.id)]["files"]["report.txt"]
+
+    assert target_file.read_text(encoding="utf-8") == f"![photo](references/{digest}.png)\n"
+    assert image_file.exists()
+    assert entry["image_relpaths"] == [f"{task.paths.output_subdir}/references/{digest}.png"]
+
+    source_file.unlink()
+    engine.queue_path(task.id or 0, str(source_file))
+    engine.queued_paths[task.id or 0][source_file] = 0
+    engine._process_task_queue(task)
+
+    assert not target_file.exists()
+    assert not image_file.exists()
+
+
+def test_sync_engine_adds_overwrites_and_removes_images_when_source_updates(tmp_path: Path, monkeypatch) -> None:
+    storage = Storage(tmp_path / "app.db")
+    task = create_task(storage, tmp_path)
+    converter = Converter()
+    engine = SyncEngine(storage, converter, GitManager())
+    source_file = Path(task.paths.source_dir) / "report.txt"
+    source_file.write_text("v1\n", encoding="utf-8")
+    kept = b"kept-image"
+    removed = b"removed-image"
+    added = b"added-image"
+    overwritten = b"overwritten-image"
+
+    def fake_convert(task_arg, source_path, target_path=None):
+        assert target_path is not None
+        version = source_path.read_text(encoding="utf-8")
+        payloads = [kept, removed] if version == "v1\n" else [kept, added, overwritten]
+        links = []
+        rels = []
+        for payload in payloads:
+            image_path = _write_sha256_image(target_path, payload)
+            rel = f"references/{image_path.name}"
+            links.append(f"![]({rel})")
+            rels.append(rel)
+        return ConversionResult("\n".join(links) + "\n", tuple(rels))
+
+    monkeypatch.setattr(converter, "convert_path", fake_convert)
+    engine.queue_path(task.id or 0, str(source_file))
+    engine.queued_paths[task.id or 0][source_file] = 0
+    engine._process_task_queue(task)
+
+    target_file = Path(task.paths.target_root) / task.paths.output_subdir / "report.txt.md"
+    kept_path = _write_sha256_image(target_file, kept)
+    removed_path = target_file.parent / "references" / f"{hashlib.sha256(removed).hexdigest()}.png"
+    added_path = target_file.parent / "references" / f"{hashlib.sha256(added).hexdigest()}.png"
+    overwritten_path = target_file.parent / "references" / f"{hashlib.sha256(overwritten).hexdigest()}.png"
+    original_kept_mtime = kept_path.stat().st_mtime_ns
+
+    assert kept_path.exists()
+    assert removed_path.exists()
+    assert not added_path.exists()
+
+    source_file.write_text("v2\n", encoding="utf-8")
+    engine.queue_path(task.id or 0, str(source_file))
+    engine.queued_paths[task.id or 0][source_file] = 0
+    engine._process_task_queue(task)
+
+    assert kept_path.exists()
+    assert kept_path.read_bytes() == kept
+    assert kept_path.stat().st_mtime_ns >= original_kept_mtime
+    assert not removed_path.exists()
+    assert added_path.exists()
+    assert added_path.read_bytes() == added
+    assert overwritten_path.exists()
+    assert overwritten_path.read_bytes() == overwritten
+    markdown = target_file.read_text(encoding="utf-8")
+    assert kept_path.name in markdown
+    assert added_path.name in markdown
+    assert overwritten_path.name in markdown
+    assert removed_path.name not in markdown
+
+
+def test_shared_image_is_kept_until_last_document_stops_using_it(tmp_path: Path, monkeypatch) -> None:
+    storage = Storage(tmp_path / "app.db")
+    task = create_task(storage, tmp_path)
+    converter = Converter()
+    engine = SyncEngine(storage, converter, GitManager())
+    first = Path(task.paths.source_dir) / "first.txt"
+    second = Path(task.paths.source_dir) / "second.txt"
+    first.write_text("first\n", encoding="utf-8")
+    second.write_text("second\n", encoding="utf-8")
+    payload = b"shared-image"
+
+    def fake_convert(task_arg, source_path, target_path=None):
+        assert target_path is not None
+        image_path = _write_sha256_image(target_path, payload)
+        rel = f"references/{image_path.name}"
+        return ConversionResult(f"![]({rel})\n", (rel,))
+
+    monkeypatch.setattr(converter, "convert_path", fake_convert)
+    for source_file in (first, second):
+        engine.queue_path(task.id or 0, str(source_file))
+        engine.queued_paths[task.id or 0][source_file] = 0
+        engine._process_task_queue(task)
+
+    target_root = Path(task.paths.target_root) / task.paths.output_subdir
+    image_file = target_root / "references" / f"{hashlib.sha256(payload).hexdigest()}.png"
+    assert image_file.exists()
+    assert (target_root / "first.txt.md").exists()
+    assert (target_root / "second.txt.md").exists()
+
+    first.unlink()
+    engine.queue_path(task.id or 0, str(first))
+    engine.queued_paths[task.id or 0][first] = 0
+    engine._process_task_queue(task)
+
+    assert not (target_root / "first.txt.md").exists()
+    assert (target_root / "second.txt.md").exists()
+    assert image_file.exists()
+    assert image_file.read_bytes() == payload
+
+    second.unlink()
+    engine.queue_path(task.id or 0, str(second))
+    engine.queued_paths[task.id or 0][second] = 0
+    engine._process_task_queue(task)
+
+    assert not (target_root / "second.txt.md").exists()
+    assert not image_file.exists()
+
+
+def test_manifest_tracks_only_converter_owned_images(tmp_path: Path, monkeypatch) -> None:
+    storage = Storage(tmp_path / "app.db")
+    task = create_task(storage, tmp_path)
+    converter = Converter()
+    engine = SyncEngine(storage, converter, GitManager())
+    source_file = Path(task.paths.source_dir) / "report.txt"
+    source_file.write_text("v1\n", encoding="utf-8")
+    payload = b"owned-image"
+
+    def fake_convert(task_arg, source_path, target_path=None):
+        assert target_path is not None
+        image_path = _write_sha256_image(target_path, payload)
+        rel = f"references/{image_path.name}"
+        return ConversionResult(f"see references/not-managed.png\n![]({rel})\n", (rel,))
+
+    monkeypatch.setattr(converter, "convert_path", fake_convert)
+    engine.queue_path(task.id or 0, str(source_file))
+    engine.queued_paths[task.id or 0][source_file] = 0
+    engine._process_task_queue(task)
+
+    manifest = json.loads((Path(task.paths.target_root) / MANIFEST_NAME).read_text(encoding="utf-8"))
+    entry = manifest["tasks"][str(task.id)]["files"]["report.txt"]
+    digest = hashlib.sha256(payload).hexdigest()
+    assert entry["image_relpaths"] == [f"{task.paths.output_subdir}/references/{digest}.png"]
 
 
 def test_remove_task_clears_manifest_section(tmp_path: Path) -> None:

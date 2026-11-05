@@ -114,16 +114,15 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.prepare.outputs.release_ref }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10
         with:
           python-version: "3.12"
 
       - name: Build Linux distribution
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install . pyinstaller
-          pyinstaller --noconfirm office-docs-to-md-sync.spec
+          uv sync --frozen --no-dev --group build
+          uv run pyinstaller --noconfirm office-docs-to-md-sync.spec
           tar -C dist -czf dist/office-docs-to-md-sync-linux-x86_64.tar.gz office-docs-to-md-sync
 
       - name: Upload Linux artifact
@@ -143,17 +142,16 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.prepare.outputs.release_ref }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10
         with:
           python-version: "3.12"
 
       - name: Build Windows distribution
         shell: powershell
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install . pyinstaller
-          pyinstaller --noconfirm office-docs-to-md-sync.spec
+          uv sync --frozen --no-dev --group build
+          uv run pyinstaller --noconfirm office-docs-to-md-sync.spec
           Compress-Archive -Path dist/office-docs-to-md-sync/* -DestinationPath dist/office-docs-to-md-sync-windows-x86_64.zip -Force
 
       - name: Upload Windows artifact
@@ -220,7 +218,7 @@ jobs:
       - name: Smoke test builder environment
         run: |
           docker build --target builder -t office-docs-to-md-sync-builder-smoke .
-          docker run --rm office-docs-to-md-sync-builder-smoke python -c "import app.converter, markitdown_no_magika"
+          docker run --rm office-docs-to-md-sync-builder-smoke python -c "import app.converter, markitdown"
 
       - name: Generate Docker metadata
         id: meta

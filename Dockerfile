@@ -1,21 +1,24 @@
 FROM python:3.12-alpine AS builder
 
-ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+COPY --from=ghcr.io/astral-sh/uv:0.13.7 /uv /bin/uv
 
-RUN apk add --no-cache build-base git libffi-dev
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/src/.venv \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/src/.venv/bin:$PATH"
+
+RUN apk add --no-cache build-base git libffi-dev binutils
 
 WORKDIR /src
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY run_app.py ./
 COPY app ./app
 COPY office-docs-to-md-sync.spec ./
 
-RUN python -m pip install --upgrade pip \
-    && python -m pip install --no-cache-dir . pyinstaller \
-    && python -m pip uninstall -y magika \
+RUN uv sync --frozen --no-dev --group build \
     && python -c "import app.converter, markitdown" \
     && pyinstaller --noconfirm office-docs-to-md-sync.spec
 

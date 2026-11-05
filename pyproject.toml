@@ -17,10 +17,13 @@ dependencies = [
 [project.scripts]
 office-docs-to-md-sync = "app.main:main"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
   "httpx>=0.28.1,<1.0.0",
   "pytest>=9.0.0,<10.0.0",
+]
+build = [
+  "pyinstaller>=6.16.0",
 ]
 
 [build-system]
@@ -37,6 +40,7 @@ include = ["app*"]
 app = ["static/*.html", "static/*.js", "static/*.css"]
 
 [tool.uv]
+required-version = ">=0.13.0"
 exclude-dependencies = [
     "magika",
 ]

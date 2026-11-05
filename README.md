@@ -23,11 +23,9 @@ Latest container image: `ghcr.io/flier268/office-docs-to-md-sync:latest`
 ## Quick start
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .[dev]
-pip uninstall -y magika
-office-docs-to-md-sync
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync
+uv run office-docs-to-md-sync
 ```
 
 Open `http://127.0.0.1:8080`.
@@ -58,16 +56,16 @@ Windows PowerShell:
 ## Test
 
 ```bash
-pytest
+uv run pytest
 ```
 
-`pip install` still pulls magika as a markitdown extra. Uninstall it (`pip uninstall -y magika`) so `app.markitdown_tweaks` can stub the import. uv users get this from `[tool.uv] exclude-dependencies`.
+Magika is excluded from the uv lock (`[tool.uv] exclude-dependencies`). `app.markitdown_tweaks` stubs the import.
 
 ## Build binary
 
 ```bash
-python -m pip install pyinstaller
-pyinstaller --noconfirm office-docs-to-md-sync.spec
+uv sync --group build
+uv run pyinstaller --noconfirm office-docs-to-md-sync.spec
 ```
 
 The generated binary bundle is written to `dist/office-docs-to-md-sync/` and includes the web UI static assets.
